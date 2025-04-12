@@ -308,25 +308,23 @@ class NtupleApproximator:
         exps = board_to_exponents(board)
         return self.n_tuple_agent.V(exps)
 
-import os
-from pathlib import Path
-import gdown
 
-# ─── Download pretrained model if missing ────────────────────────────────────────
+import gdown
+from pathlib import Path
+
 MODEL_DIR  = Path("models_try")
 MODEL_PATH = MODEL_DIR / "nTupleNet_30000games.pkl"
 DRIVE_ID    = "1yQCKO8FqA85VFJGRRmGBbogK5CfSRFNf"
 URL         = f"https://drive.google.com/uc?id={DRIVE_ID}"
 
+NTUPLE_AGENT = None
+IS_LOADED = False
 if not MODEL_PATH.exists():
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Downloading pretrained model to {MODEL_PATH} …")
     gdown.download(URL, str(MODEL_PATH), quiet=False)
 else:
     print(f"Found pretrained model at {MODEL_PATH}")
-
-NTUPLE_AGENT = None
-IS_LOADED = False
 
 def load_ntuple_agent():
     global NTUPLE_AGENT, IS_LOADED
@@ -336,14 +334,12 @@ def load_ntuple_agent():
     sys.modules["__main__"].IllegalAction = n_tuple_network.IllegalAction
 
     if not IS_LOADED:
-        checkpoint_path = "/tmp2/b11902127/DRL-Assignment-2/models_try/nTupleNet_30000games.pkl"
+        # checkpoint_path = "/tmp2/b11902127/DRL-Assignment-2/models_try/nTupleNet_30000games.pkl"
         with open(MODEL_PATH, "rb") as f:
             n_games, agent = pickle.load(f)
             NTUPLE_AGENT = agent
-        print(f"Loaded checkpoint, trained for {n_games} games.")
-            
         IS_LOADED = True
-        print(f"[INFO] Loaded nTupleNetwork from {checkpoint_path}, trained {n_games} games.")
+        print(f"[INFO] Loaded nTupleNetwork from {MODEL_PATH}, trained {n_games} games.")
 
 
 
