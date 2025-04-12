@@ -342,8 +342,12 @@ def load_ntuple_agent():
         print(f"[INFO] Loaded nTupleNetwork from {MODEL_PATH}, trained {n_games} games.")
 
 
-
+last_score = 0
 def get_action(state, score):
+    global last_score
+    if score > last_score + 5000:
+        last_score = score
+        print("score checkpoint : ", last_score)
     
     load_ntuple_agent()
     approximator = NtupleApproximator(NTUPLE_AGENT)
