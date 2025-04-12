@@ -1,4 +1,5 @@
-# Remember to adjust your student ID in meta.xml
+# student_agent.py
+
 import numpy as np
 import pickle
 import random
@@ -6,8 +7,15 @@ import gym
 from gym import spaces
 import matplotlib.pyplot as plt
 import copy
-import random
 import math
+from n_tuple_network import nTupleNetwork, IllegalAction
+import pickle
+import MCTS
+from MCTS import TD_MCTS_Node, TD_MCTS
+from tqdm import trange
+
+
+
 
 
 class Game2048Env(gym.Env):
@@ -228,13 +236,134 @@ class Game2048Env(gym.Env):
         else:
             raise ValueError("Invalid action")
 
-        # If the simulated board is different from the current board, the move is legal
         return not np.array_equal(self.board, temp_board)
 
+def board_to_exponents(board):
+    """
+    將 4x4 (0,2,4,8,...) -> 長度16 (exponent)
+    0 -> 0, 2 ->1, 4->2, 8->3, ...
+    """
+    exps = []
+    for v in board.flatten():
+        if v == 0:
+            exps.append(0)
+        else:
+            exps.append(int(math.log2(v)))
+    return exps
+
+def simulate_move(board, action, env_ref):
+    """
+    回傳「對 board 執行 action(只做合併)」後的新盤面 (不更新 score，不加 random tile)。
+    可參考 is_move_legal() / move_up() 等邏輯，但不改 env_ref.score。
+    """
+    size = env_ref.size
+    new_board = board.copy()
+
+    def simulate_row_left(row):
+        # 跟 environment simulate_row_move 一樣，但保證不更新score
+        new_row = row[row != 0]
+        new_row = np.pad(new_row, (0, size - len(new_row)), mode='constant')
+        for i in range(len(new_row) - 1):
+            if new_row[i] == new_row[i + 1] and new_row[i] != 0:
+                new_row[i] *= 2
+                new_row[i + 1] = 0
+        new_row = new_row[new_row != 0]
+        new_row = np.pad(new_row, (0, size - len(new_row)), mode='constant')
+        return new_row
+
+    if action == 0:  # up
+        for j in range(size):
+            col = new_board[:, j]
+            new_col = simulate_row_left(col)
+            new_board[:, j] = new_col
+    elif action == 1:  # down
+        for j in range(size):
+            col = new_board[:, j][::-1]
+            new_col = simulate_row_left(col)
+            new_board[:, j] = new_col[::-1]
+    elif action == 2:  # left
+        for i in range(size):
+            row = new_board[i]
+            new_board[i] = simulate_row_left(row)
+    elif action == 3:  # right
+        for i in range(size):
+            row = new_board[i][::-1]
+            new_row = simulate_row_left(row)
+            new_board[i] = new_row[::-1]
+    else:
+        raise ValueError("Invalid action")
+
+    return new_board
+
+
+class NtupleApproximator:
+    def __init__(self, n_tuple_agent):
+        self.n_tuple_agent = n_tuple_agent
+
+    def value(self, board):
+        """
+        回傳該盤面的評估值 (float)。
+        這裡直接調用 n_tuple_agent.V(...)
+        """
+        exps = board_to_exponents(board)
+        return self.n_tuple_agent.V(exps)
+
+import os
+from pathlib import Path
+import gdown
+
+# ─── Download pretrained model if missing ────────────────────────────────────────
+MODEL_DIR  = Path("models_try")
+MODEL_PATH = MODEL_DIR / "nTupleNet_30000games.pkl"
+DRIVE_ID    = "1yQCKO8FqA85VFJGRRmGBbogK5CfSRFNf"
+URL         = f"https://drive.google.com/uc?id={DRIVE_ID}"
+
+if not MODEL_PATH.exists():
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading pretrained model to {MODEL_PATH} …")
+    gdown.download(URL, str(MODEL_PATH), quiet=False)
+else:
+    print(f"Found pretrained model at {MODEL_PATH}")
+
+NTUPLE_AGENT = None
+IS_LOADED = False
+
+def load_ntuple_agent():
+    global NTUPLE_AGENT, IS_LOADED
+    import sys
+    import n_tuple_network
+    sys.modules["__main__"].nTupleNetwork = n_tuple_network.nTupleNetwork
+    sys.modules["__main__"].IllegalAction = n_tuple_network.IllegalAction
+
+    if not IS_LOADED:
+        checkpoint_path = "/tmp2/b11902127/DRL-Assignment-2/models_try/nTupleNet_30000games.pkl"
+        with open(MODEL_PATH, "rb") as f:
+            n_games, agent = pickle.load(f)
+            NTUPLE_AGENT = agent
+        print(f"Loaded checkpoint, trained for {n_games} games.")
+            
+        IS_LOADED = True
+        print(f"[INFO] Loaded nTupleNetwork from {checkpoint_path}, trained {n_games} games.")
+
+
+
 def get_action(state, score):
-    env = Game2048Env()
-    return random.choice([0, 1, 2, 3]) # Choose a random action
     
-    # You can submit this random agent to evaluate the performance of a purely random strategy.
+    load_ntuple_agent()
+    approximator = NtupleApproximator(NTUPLE_AGENT)
+    env_temp = Game2048Env()
+    
 
+    env_temp.board = state.copy()
+    env_temp.score = score
+    
+    mcts = TD_MCTS(env=env_temp, approximator=approximator, iterations=100, exploration_constant=1.41, rollout_depth=8, gamma=0.99)
+    root_node = TD_MCTS_Node(state=state, score=score, parent=None, action=None)
 
+    for _ in range(mcts.iterations):
+        mcts.run_simulation(root_node)
+
+    best_a, dist = mcts.best_action_distribution(root_node)
+    if best_a is None:
+        return random.choice([0,1,2,3])
+    return best_a
