@@ -312,11 +312,13 @@ class NtupleApproximator:
 import gdown
 from pathlib import Path
 
+
 MODEL_DIR  = Path("models_try")
 MODEL_PATH = MODEL_DIR / "nTupleNet_30000games.pkl"
 # DRIVE_ID    = "1yQCKO8FqA85VFJGRRmGBbogK5CfSRFNf"
-DRIVE_ID   =  "14YbYyWUUINlI4LfarzUgOXK1e7VXYPG4"
-URL         = f"https://drive.google.com/uc?id={DRIVE_ID}"
+# DRIVE_ID   =  "14YbYyWUUINlI4LfarzUgOXK1e7VXYPG4"
+DRIVE_ID   = "12-n-syQLTDkh2AMROM0gWtNl-10VZXIy"
+URL        = f"https://drive.google.com/uc?id={DRIVE_ID}"
 
 NTUPLE_AGENT = None
 IS_LOADED = False
